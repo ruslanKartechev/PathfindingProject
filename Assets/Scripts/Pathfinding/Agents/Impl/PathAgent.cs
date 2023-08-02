@@ -15,8 +15,8 @@ namespace Pathfinding.Agents
         #region Constants
         private const float MinMove2 = 0.005f * 0.005f; // minimum movement squared
         private const float StuckTime = 0.5f; // time to be stuck in seconds
-        private const float StuckSideMoveAmountStart = 3; // amount to move sideways, when stuck
-        private const float StuckSideMoveAmountEnd = 4; // amount to move sideways, when stuck
+        private const float StuckSideMoveAmountStart = 2; // amount to move sideways, when stuck
+        private const float StuckSideMoveAmountEnd = 5; // amount to move sideways, when stuck
         private const float StuckSideMoveAmountStep = 1; // amount to move sideways, when stuck
         
         #endregion
@@ -184,18 +184,21 @@ namespace Pathfinding.Agents
             var distance2 = moveVector.sqrMagnitude;
             if (_nextPercent >= 1f)
             {
-                if (distance2 < Mathf.Pow((PathfindingManager.DeltaTime * _currentSpeed), 2))
-                {
-                    _percent = 1f;
-                    _nextPos = _mover.EvaluateAt(_percent);
-                }
+                if(_doDebug)
+                    Dbg.Green($"[{gameObject.name}] NEXT PERCENT is 1f");
+                // if (distance2 < Mathf.Pow((PathfindingManager.DeltaTime * _currentSpeed), 2))
+                // {
+                //    
+                // }
+                _percent = 1f;
+                _nextPos = _mover.EvaluateAt(_percent);
                 Position = _nextPos;
                 return;
             }
             var prev = _percent;
-            _percent = _mover.GetPercent(_nextPos, _percent * 0.5f, _percent * 1.5f);
+            _percent = _mover.GetPercent(_nextPos, _percent - 0.25f, _percent + 0.25f);
             if(_doDebug)
-                Log($"Proj percent: {_percent:N6}, prev percent: {prev:N6}");
+                Log($"[{gameObject.name}] Proj percent: {_percent:N6}, prev percent: {prev:N6}");
             
             _lookDirection = _mover.EvaluateAt(_percent + PercentSpeed * PathfindingManager.DeltaTime)
                              - Position;
@@ -238,43 +241,67 @@ namespace Pathfinding.Agents
         private bool MoveToUnstuck()
         {
             CorrectDestination(_setTarget);
-            Vector3 sidePos;
             var sign = 1f;
             var dirToTarget = _currentTarget - Position;
-            if (Vector3.Dot(dirToTarget, Right) > 0)
-                sign = 1;
-            else
-                sign = -1;
-            sidePos = _movable.position + Right * (sign * StuckSideMoveAmountStart);
+            var sidePos = Position;
+            var willWalk = false;
+            for (var distance = StuckSideMoveAmountStart; distance <= StuckSideMoveAmountEnd; distance += StuckSideMoveAmountStep)
+            {
+                if (GetSidePosition(out sidePos, distance))
+                {
+                    willWalk = true;
+                    break;
+                }
+            }
+            // if (Vector3.Dot(dirToTarget, Right) > 0)
+            //     sign = 1;
+            // else
+            //     sign = -1;
+            // sidePos = _movable.position + Right * (sign * StuckSideMoveAmountStart);
             var ditToSidePos = sidePos - Position;
             var angle = Vector3.SignedAngle(dirToTarget, ditToSidePos, Vector3.up);
-            var walkable = _grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos));
-            if (!walkable)
-            {
-                sidePos = _movable.position - Right * StuckSideMoveAmountStart;
-                walkable = _grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos));
-            }
-            if (walkable)
+            // var walkable = _grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos));
+            // if (!walkable)
+            // {
+            //     sidePos = _movable.position - Right * StuckSideMoveAmountStart;
+            //     walkable = _grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos));
+            // }
+            // if (walkable)
+            // {
+            //     if (Math.Abs(angle) > 10)
+            //         WalkToWaypoints(new List<Vector3>(){sidePos, _currentTarget},OnFailed, OnReachedEndPoint);
+            //     else
+            //     {
+            //         WalkToPoint(_currentTarget, OnFailed, OnReachedEndPoint);
+            //     }
+            //     return true;
+            // }
+            if (willWalk)
             {
                 if (Math.Abs(angle) > 10)
                     WalkToWaypoints(new List<Vector3>(){sidePos, _currentTarget},OnFailed, OnReachedEndPoint);
                 else
-                {
-                    Log($"Moving right to point");
                     WalkToPoint(_currentTarget, OnFailed, OnReachedEndPoint);
-                }
                 return true;
             }
             Dbg.Red($"[{gameObject.name}] Side not walkable, sorry ((");
             return false;
         }
 
-        private Vector3 GetSidePosition(Vector3 from, Vector3 to, int side)
+        private bool GetSidePosition(out Vector3 result, float distance)
         {
-            var direction = (to - from).normalized;
-            direction = Quaternion.Euler(0, 90 * side, 0) * direction;
-            var sideMoveAmount = UnityEngine.Random.Range(StuckSideMoveAmountStart, StuckSideMoveAmountEnd);
-            return Vector3.Lerp(from, to, 0.5f) + direction * sideMoveAmount;
+            var sidePos = _movable.position + Right * (distance);
+            if (!_grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos)))
+            {
+                sidePos = _movable.position - Right * distance;
+                if (!_grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos)))
+                {
+                    result = sidePos;
+                    return false;
+                }
+            }
+            result = sidePos;
+            return true;
         }
 
         private void Prepare()
@@ -319,7 +346,8 @@ namespace Pathfinding.Agents
             var diff = _mover.EvaluateAt(_nextPercent) - currentPos;
             _nextPos = currentPos + (diff).normalized 
                 * (dt * _currentSpeed);
-            // Dbg.Green($"Calculate next, np: {_nextPercent}");
+            if(_doDebug)
+                Dbg.Log($"Calculate next, np: {_nextPercent}, prev: {_percent}");
         }
 
         protected void BeginRotation(Vector3 lookVector)

@@ -139,11 +139,10 @@ namespace Pathfinding.Agents
         {
             return GetPercentFor(_segments.Count + 1, position, start, end, slices);
         }
-        
 
         public Vector3 EvaluateAt(double percent)
         {
-            var t = percent < 0 ? 0 : percent;
+            var t = percent <= 0 ? 0 : percent;
             percent = t > 1f ? 1f : percent;
             
             for (var i = 0; i < _segments.Count; i++)
@@ -155,7 +154,7 @@ namespace Pathfinding.Agents
                 }
             }
             Dbg.Red($"[MovementCalculator] Returning zero pos. Percent: {percent}");
-            return Vector3.zero;
+            return _segments[0].GetPosition(0);
         }
 
         private void EvaluateAt(ref Vector3 pos, double percent)
