@@ -36,12 +36,12 @@ namespace Pathfinding.Algorithms.Impl
             return new Path(pathGridPoints, foundPathToDestination);
         }
 
-        public Path FindPath(GridCoord2 start, GridCoord2 target, IList<GridCoord2> excluded)
+        public Path FindPath(GridCoord2 start, GridCoord2 target, ICollection<GridCoord2> excluded)
         {
             Refresh();
             pathGridPoints.Clear();
             foreach (var pos in excluded)
-                closedList.Add(pos);
+                _excludedPos.Add(pos);
             var foundPathToDestination = GeneratePath(start, target);
             pathGridPoints.Add(_currentEndPoint);
             while (links.TryGetValue(_currentEndPoint, out _currentEndPoint))
@@ -50,13 +50,15 @@ namespace Pathfinding.Algorithms.Impl
             return new Path(pathGridPoints, foundPathToDestination);
         }
         
-        public override Path FindPathOnWaypoints(GridCoord2 start, IList<GridCoord2> targets, IEnumerable<GridCoord2> excluded)
+        public override Path FindPathOnWaypoints(GridCoord2 start, IList<GridCoord2> targets, ICollection<GridCoord2> excluded)
         {
             Refresh();
             pathGridPoints.Clear();
             var foundPathToTarget = true;
             var count = targets.Count;
             var pathFragments = new List<List<GridCoord2>>(count);
+            foreach (var pos in excluded)
+                _excludedPos.Add(pos);
             for (var i = 0; i < count; i++)
             {
                 var ithDest = targets[i];
@@ -91,7 +93,6 @@ namespace Pathfinding.Algorithms.Impl
             return new Path(pathGridPoints, foundPathToTarget);
         }
         
-        
         private bool GeneratePath(GridCoord2 start, GridCoord2 target)
         {
             var currentNode = new PathNode(start, 0, _heuristicFunction.GetHeuristic(start, target));
@@ -115,15 +116,17 @@ namespace Pathfinding.Algorithms.Impl
             NeighbourFiller.Fill(neighbours, parent, target, _heuristicFunction);
             foreach (var nextNode in neighbours)
             {
-                if (_grid.GetWalkable(nextNode.Position) == false)
+                if (closedList.Contains(nextNode.Position)) 
+                    continue;
+                
+                if (_grid.GetWalkable(nextNode.Position) == false
+                    || _excludedPos.Contains(nextNode.Position))
                 {
                     closedList.Add(nextNode.Position);
                     continue;
                 }
-                if (closedList.Contains(nextNode.Position)) 
-                    continue;
-                if (openList.TryGet(nextNode.Position, 
-                        out var existingNode) == false)
+         
+                if (openList.TryGet(nextNode.Position, out var existingNode) == false)
                 {
                     // Node is not on the open list.
                     openList.Enqueue(nextNode);
@@ -142,8 +145,8 @@ namespace Pathfinding.Algorithms.Impl
             }
         }
 
-        
-        public void RemoveExtraPoints(IList<GridCoord2> path, IPathfindingGrid grid)
+
+        private void RemoveExtraPoints(IList<GridCoord2> path, IPathfindingGrid grid)
         {
             if(path.Count < 3)
                 return;
@@ -151,7 +154,9 @@ namespace Pathfinding.Algorithms.Impl
             var nextIndex = startIndex - 2;
             while (nextIndex >= 0)
             {
-                if (CheckWalkable(path[startIndex], path[nextIndex]))
+                var walkable = _excludedPos.Contains(path[nextIndex]) ||
+                               CheckWalkable(path[startIndex], path[nextIndex]);
+                if (walkable)
                 {
                     path.RemoveAt(nextIndex + 1);
                     startIndex--;

@@ -19,7 +19,7 @@ namespace Pathfinding.Grid
         public Vector3 firstNodeWorldPosition;
         
         public IList<GridPoint> Points => GridPoints;
-        private Dictionary<GridCoord2, bool> _busyPoints;
+        private HashSet<GridCoord2> _busyPoints;
 
         public WorldGrid(int lengthX, int lengthY, 
             float size, Vector3 firstNodeWorldPosition)
@@ -29,12 +29,12 @@ namespace Pathfinding.Grid
             cellSize = size;
             GridPoints = new List<GridPoint>(lengthX *lengthY);
             this.firstNodeWorldPosition = firstNodeWorldPosition;
-            _busyPoints = new Dictionary<GridCoord2, bool>();
+            _busyPoints = new HashSet<GridCoord2>();
         }
 
         public void Init()
         {
-            _busyPoints = new Dictionary<GridCoord2, bool>();
+            _busyPoints = new HashSet<GridCoord2>();
         }
         
         public void CorrectXIndex(int input, out int index)
@@ -85,6 +85,11 @@ namespace Pathfinding.Grid
             return new GridCoord2(x, y);
         }
 
+        public ICollection<GridCoord2> GetBusyCoords()
+        {
+            return _busyPoints;
+        }
+
         public GridCoord2 GetClosestFreeCoord(GridCoord2 coordinate)
         {
             foreach (var direction in Neighbours1)
@@ -101,10 +106,8 @@ namespace Pathfinding.Grid
 
         public void SetBusy(GridCoord2 coordinate)
         {
-            if(_busyPoints.ContainsKey(coordinate) == false)
-                _busyPoints.Add(coordinate, true);
-            else
-                _busyPoints[coordinate] = true;
+            if (_busyPoints.Contains(coordinate) == false)
+                _busyPoints.Add(coordinate);
             #if DoDebug
             WorldGridBuilder.AddOccupiedPoint(coordinate);
             #endif
@@ -112,7 +115,7 @@ namespace Pathfinding.Grid
 
         public void FreeCoord(GridCoord2 coordinate)
         {
-            _busyPoints[coordinate] = false;
+            _busyPoints.Remove(coordinate);
             #if DoDebug
             WorldGridBuilder.RemoveOccupiedPoint(coordinate);
             #endif
@@ -120,9 +123,7 @@ namespace Pathfinding.Grid
 
         public bool CheckBusy(GridCoord2 coordinate)
         {
-            if(_busyPoints.ContainsKey(coordinate) == false)
-                _busyPoints.Add(coordinate, false);
-            return _busyPoints[coordinate];
+            return _busyPoints.Contains(coordinate);
         }
         
         public bool CheckWalkableAndFree(GridCoord2 coordinate)

@@ -14,8 +14,8 @@ namespace Pathfinding.Grid
 
         public Vector3 GetWorldPosition(GridCoord2 coordinate);
         public GridCoord2 GetGridCoordinate(Vector3 worldPosition);
-        
-        
+        public ICollection<GridCoord2> GetBusyCoords();
+
         public void SetBusy(GridCoord2 coordinate);
         public void FreeCoord(GridCoord2 coordinate);
         public bool CheckBusy(GridCoord2 coordinate);

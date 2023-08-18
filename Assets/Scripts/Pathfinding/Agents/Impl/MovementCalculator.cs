@@ -1,4 +1,5 @@
 ﻿#define DoDebug
+using System;
 using System.Collections.Generic;
 using Pathfinding.Algorithms;
 using Pathfinding.Algorithms.Impl;
@@ -31,29 +32,22 @@ namespace Pathfinding.Agents
             for (var i = count - 1; i >= 1; i--)
             {
                 if (i == count - 1)
-                {
                     lineSegment = new LinePathSegment(startPos, grid.GetWorldPosition(path.Points[i - 1]));
-                }
                 else if (i == 1)
-                {
                     lineSegment = new LinePathSegment(grid.GetWorldPosition(path.Points[1]), endWorldPos);
-                }
                 else
                 {
                     lineSegment = new LinePathSegment(grid.GetWorldPosition(path.Points[i]),
                         grid.GetWorldPosition(path.Points[i - 1]));
                 }
-                // start = path.Points[i];
-                // end = path.Points[i-1];   
-                // Dbg.Red($"Added line path: From {start}   To: {end}");
                 lineSegments.Add(lineSegment);
                 #if UNITY_EDITOR && DoDebug
-                // Debug.DrawLine(lineSegment.start + Vector3.up * 0.25f, 
-                //     lineSegment.end + Vector3.up * 0.25f, 
-                //     Color.black, 2f);
+                Debug.DrawLine(lineSegment.start + Vector3.up * 0.25f, 
+                    lineSegment.end + Vector3.up * 0.25f, 
+                    Color.black, 2f);
                 #endif
             }
-
+            // NoSmoothing(lineSegments);
             // return;
             if (smoother != null)
                 Smooth(lineSegments, smoother);
@@ -142,16 +136,11 @@ namespace Pathfinding.Agents
 
         public Vector3 EvaluateAt(double percent)
         {
-            var t = percent <= 0 ? 0 : percent;
-            percent = t > 1f ? 1f : percent;
-            
+            percent = Math.Clamp(percent, 0d, 1d);
             for (var i = 0; i < _segments.Count; i++)
             {
-                if (_segments[i].beginT <= percent
-                    && _segments[i].endT >= percent)
-                {
+                if (_segments[i].beginT <= percent && _segments[i].endT >= percent)
                     return _segments[i].GetPosition(percent);
-                }
             }
             Dbg.Red($"[MovementCalculator] Returning zero pos. Percent: {percent}");
             return _segments[0].GetPosition(0);

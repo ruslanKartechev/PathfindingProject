@@ -11,12 +11,12 @@ namespace Pathfinding
 
         public static void AddAgent(IPathfindingAgent agent)
         {
-            PathfindingAgentsContainer.Add(agent);
+            AgentsContainer.Add(agent);
         }
         
         public static void RemoveAgent(IPathfindingAgent agent)
         {
-            PathfindingAgentsContainer.Remove(agent);
+            AgentsContainer.Remove(agent);
         }
 
 

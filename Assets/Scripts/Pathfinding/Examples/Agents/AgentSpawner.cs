@@ -7,7 +7,7 @@ namespace Pathfinding.Examples.Agents
 {
     public class AgentSpawner : MonoBehaviour
     {
-        public bool coroutineSpawn;
+        public bool spawnWithDelay;
         public float spawnDelay = 0.5f;
         [Space(5)]
         public Transform targetPointDefault;
@@ -15,11 +15,11 @@ namespace Pathfinding.Examples.Agents
         public bool randomTargets;
         [Space(5)]
         public PositionRectGrid rectGrid;
-        public PathTestAgent agentPrefab;
+        public SimpleAnimatedAgent agentPrefab;
         public float moveSpeed;
         public bool spawnOnGrid;
         public bool initPrespawned;
-        public List<PathTestAgent> prespawned;
+        public List<SimpleAnimatedAgent> prespawned;
         
         #if UNITY_EDITOR
         private void OnDrawGizmos()
@@ -37,7 +37,7 @@ namespace Pathfinding.Examples.Agents
         {
             if (spawnOnGrid)
             {
-                if (coroutineSpawn)
+                if (spawnWithDelay)
                     StartCoroutine(Spawning());
                 else
                     Spawn();

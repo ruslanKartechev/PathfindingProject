@@ -2,7 +2,7 @@
 
 namespace Pathfinding.Agents
 {
-    public static class PathfindingAgentsContainer
+    public static class AgentsContainer
     {
         public static List<IPathfindingAgent> Agents = new List<IPathfindingAgent>();
 

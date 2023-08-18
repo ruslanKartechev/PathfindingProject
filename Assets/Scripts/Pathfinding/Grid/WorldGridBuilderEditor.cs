@@ -17,10 +17,25 @@ namespace Pathfinding.Grid
 
         public override void OnInspectorGUI()
         {
+            var sizeX = 120;
+            var sizeY = 140;
+            var offsetX = 20;
+            var rect1 = new Rect(new Vector2(offsetX, 0), new Vector2(sizeX, sizeY));
+            var rect2 = new Rect(new Vector2(sizeX + offsetX, 0), new Vector2(sizeX, sizeY));
+            
+            GUILayout.BeginArea(rect1);
             Button("Generate", Color.green, me.Generate);
             Button("Draw", Color.white, () => { me.draw = true;});
-            Button("No Draw", Color.white * 0.6f, () => { me.draw = false;});
+            Button("No Draw", Color.white * 0.75f, () => { me.draw = false;});
+            GUILayout.EndArea();
             
+            GUILayout.BeginArea(rect2);
+            Button("Clear Checked", Color.white, WorldGridBuilder.ClearCheckedPoints);
+            Button("Clear Busy", Color.white, WorldGridBuilder.ClearOccupiedPoints);
+            // Button("No Draw", Color.white * 0.75f, () => { me.draw = false;});
+            GUILayout.EndArea();
+            
+            GUILayout.Space(sizeY);
             base.OnInspectorGUI();
             
         }
@@ -29,8 +44,8 @@ namespace Pathfinding.Grid
         {
             GUI.color = color;
             if (GUILayout.Button(name,
-                    GUILayout.Width(80),
-                    GUILayout.Height(30)))
+                    GUILayout.Width(110),
+                    GUILayout.Height(33)))
             {
                 action.Invoke();   
             }

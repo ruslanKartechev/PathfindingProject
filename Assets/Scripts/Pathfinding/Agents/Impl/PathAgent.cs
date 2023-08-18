@@ -1,24 +1,24 @@
-﻿#define DoDebug__
-#define Measure__
+﻿#define Measure__
+#define CorrectDestination__
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using Pathfinding.Algorithms.Impl;
 using Pathfinding.Data;
 using Pathfinding.Grid;
+using TMPro;
 using UnityEngine;
 
 namespace Pathfinding.Agents
 {
+    [RequireComponent(typeof(Rigidbody))]
     public class PathAgent : MonoBehaviour, IPathfindingAgent
     {
         #region Constants
-        private const float MinMove2 = 0.005f * 0.005f; // minimum movement squared
-        private const float StuckTime = 0.5f; // time to be stuck in seconds
+        private const float MinMove2 = 0.004f * 0.004f; // minimum movement squared
+        private const float StuckTime = 0.4f; // time to be stuck in seconds
         private const float StuckSideMoveAmountStart = 2; // amount to move sideways, when stuck
         private const float StuckSideMoveAmountEnd = 5; // amount to move sideways, when stuck
         private const float StuckSideMoveAmountStep = 1; // amount to move sideways, when stuck
-        
         #endregion
         
         #region Getters
@@ -31,7 +31,7 @@ namespace Pathfinding.Agents
         public Vector3 GetTargetPosition() => _currentTarget;
         public string GetName() => gameObject.name;
         public Vector3 GetNextPosition() => _nextPos;
-        public float GetRadius() => _agentRadius;
+        public float GetRadius() => _agentRadius * _movable.localScale.x;
         public AgentState CurrentState => _agentState;
         public Transform Movable => _movable;
         public float AgentRadius => _agentRadius;
@@ -39,6 +39,7 @@ namespace Pathfinding.Agents
 
         #region Serialized Settings
         [SerializeField] private  bool _doDebug = true;
+        [SerializeField] private Rigidbody _rigidbody;
         [Header("MoveSettings")]
         [SerializeField] private float _moveSpeed = 1f;
         [SerializeField] private float _rotationSpeed = 720;
@@ -62,6 +63,7 @@ namespace Pathfinding.Agents
         #endregion
 
         private AgentState _agentState;
+        private Vector3 _prevPosition;
         private Vector3 _nextPos;
         private Vector3 _lookDirection;
         private float _pathTotalDistance;
@@ -105,7 +107,9 @@ namespace Pathfinding.Agents
             }
         }
         private float PercentSpeed => _currentSpeed / _pathTotalDistance;
-        
+        public double Percent => _percent;
+        private string Lgn => $"[{gameObject.name}]";
+
         public void InitAgent()
         {
             _nextPos = Position;
@@ -127,13 +131,16 @@ namespace Pathfinding.Agents
             PathfindingManager.RemoveAgent(this);
         }
 
-        public void MoveTo(Vector3 position)
+        public void MoveTo(Vector3 position, bool avoidOthers = true)
         {
             _currentTarget = _setTarget = position;
 #if Measure
             var watch = System.Diagnostics.Stopwatch.StartNew();
 #endif
-            WalkToPoint(_setTarget, OnFailed, OnReachedEndPoint);
+            if(avoidOthers)
+                WalkToPoint(_setTarget, _grid.GetBusyCoords(), OnFailed, OnReachedEndPoint);
+            else
+                WalkToPoint(_setTarget, OnFailed, OnReachedEndPoint);
 #if Measure
             watch.Stop();
             var elapsedMs = watch.ElapsedMilliseconds;
@@ -163,12 +170,26 @@ namespace Pathfinding.Agents
             var myNextPos = _nextPos;
             foreach (var otherAgent in collisions)
             {
-                var otherAgentNextPos = otherAgent.GetNextPosition();
-                var dirVec = (myNextPos - otherAgentNextPos).normalized;
-                var proj = Vector3.Dot(Forward, dirVec);
+                var hisNextPos = otherAgent.GetNextPosition();
+                var dirVec = (myNextPos - hisNextPos).normalized;
+                var projOnMe = Vector3.Dot(Forward, dirVec);
+                var projOnHim = Vector3.Dot(otherAgent.GetMoveDirection(), dirVec);
+                if (projOnHim >= 0)
+                {
+                    // Dbg.Yellow($"{Lgn} Projection on him >= 0");
+                    // Dbg.Log($"{Lgn} On me: {projOnMe}, on him: {projOnHim}");
+                }
                 // projection > 0  ====> I am ahead of the other
-                if (proj >= 0) continue;
-                myNextPos = otherAgentNextPos + (myNextPos - otherAgentNextPos).normalized 
+                if (projOnMe < 0 && projOnHim >= 0)
+                {
+                    Dbg.Green($"{Lgn} Head to head situation");
+                    myNextPos += (myNextPos - hisNextPos).normalized 
+                        * (GetRadius() + otherAgent.GetRadius());
+                    continue;
+                }
+                if (projOnMe >= 0) 
+                    continue;
+                myNextPos = hisNextPos + (myNextPos - hisNextPos).normalized 
                                                 * (GetRadius() + otherAgent.GetRadius());
             }
             if (_doDebug)
@@ -180,102 +201,84 @@ namespace Pathfinding.Agents
         {
             if (_State == AgentState.Rotating)
                 return;
+            _percent = _mover.GetPercent(_nextPos, _percent - 0.25f, _percent + 0.25f);
             var moveVector = _nextPos - Position;
             var distance2 = moveVector.sqrMagnitude;
             if (_nextPercent >= 1f)
             {
-                if(_doDebug)
-                    Dbg.Green($"[{gameObject.name}] NEXT PERCENT is 1f");
-                // if (distance2 < Mathf.Pow((PathfindingManager.DeltaTime * _currentSpeed), 2))
-                // {
-                //    
-                // }
+                // if(_doDebug)
+                    // Dbg.Green($"[{gameObject.name}] NEXT PERCENT is 1f");
                 _percent = 1f;
-                _nextPos = _mover.EvaluateAt(_percent);
+                // _nextPos = _mover.EvaluateAt(_percent);
                 Position = _nextPos;
                 return;
             }
-            var prev = _percent;
-            _percent = _mover.GetPercent(_nextPos, _percent - 0.25f, _percent + 0.25f);
-            if(_doDebug)
-                Log($"[{gameObject.name}] Proj percent: {_percent:N6}, prev percent: {prev:N6}");
-            
-            _lookDirection = _mover.EvaluateAt(_percent + PercentSpeed * PathfindingManager.DeltaTime)
-                             - Position;
-            if (_lookDirection.x > 0.000001 || _lookDirection.z > 0.000001)
-                Rotation = Quaternion.LookRotation(_lookDirection); 
-            
+            var evaluatedPos = _mover.EvaluateAt(_percent + 0.05f);
+            _lookDirection = evaluatedPos - _nextPos;
+            if (_lookDirection.x > 0.00001 || _lookDirection.z > 0.00001)
+                Rotation = Quaternion.LookRotation(_lookDirection);
             #region Check For Stuck
-            if (distance2 < MinMove2)
-            {
-                _nextPos = Position;
-                _State = AgentState.Blocked;
-                _stuckTime += Time.deltaTime;
-                if (_stuckTime >= 0.5f)
-                {
-                    _stuckTime = 0f;
-                    if(MoveToUnstuck())
-                        return;
-                }
-                Position = _nextPos;
-                return;
-            }
+            // if (distance2 < MinMove2)
+            // {
+            //     _nextPos = Position;
+            //     _State = AgentState.Blocked;
+            //     _stuckTime += Time.deltaTime;
+            //     _rigidbody.velocity = Vector3.zero;
+            //     if (_stuckTime >= StuckTime)
+            //     {
+            //         _stuckTime = 0f;
+            //         if(MoveToUnstuckSideways())
+            //             return;
+            //         // OnFailed();
+            //     }
+            //     Position = _nextPos;
+            //     return;
+            // }
             #endregion
-       
             _stuckTime = 0f;
             var dot = Vector3.Dot(_movable.forward, moveVector);
             if (dot >= 0)
                 _State = AgentState.Running;
             else
                 _State = AgentState.PushedBack;
-            Position = _nextPos;
-            var nextCoord = _grid.GetGridCoordinate(_nextPos);
-            if (nextCoord != _currentCoord)
-            {
-                _grid.FreeCoord(_currentCoord);
-                _grid.SetBusy(nextCoord);
-                _currentCoord = nextCoord;
-            }
+            // Position = _nextPos;
+            _rigidbody.velocity = (moveVector).normalized *(Time.deltaTime * _moveSpeed);
+            SetNextCoord();
         }
 
         private bool MoveToUnstuck()
         {
+            var busy = _grid.GetBusyCoords();
+            WalkToPoint(_setTarget, busy, OnFailed, OnReachedEndPoint);
+            return true;
+        }
+        
+        private bool MoveToUnstuckSideways()
+        {
+            Debug.Log($"MoveToUnstuckSideways");
+            if ((_currentTarget - Position).sqrMagnitude <= Math.Pow(GetRadius() * 2f, 2))
+            {
+                // Dbg.Red("Already close");
+                OnReachedEndPoint();
+                return true;
+            }
             CorrectDestination(_setTarget);
-            var sign = 1f;
             var dirToTarget = _currentTarget - Position;
             var sidePos = Position;
             var willWalk = false;
-            for (var distance = StuckSideMoveAmountStart; distance <= StuckSideMoveAmountEnd; distance += StuckSideMoveAmountStep)
+            var side = Math.Sign(Vector3.Dot(dirToTarget, Right));
+            for (var distance = StuckSideMoveAmountStart; 
+                 distance <= StuckSideMoveAmountEnd; 
+                 distance += StuckSideMoveAmountStep)
             {
-                if (GetSidePosition(out sidePos, distance))
+                if (GetSidePosition(out sidePos, distance, side))
                 {
                     willWalk = true;
                     break;
                 }
             }
-            // if (Vector3.Dot(dirToTarget, Right) > 0)
-            //     sign = 1;
-            // else
-            //     sign = -1;
-            // sidePos = _movable.position + Right * (sign * StuckSideMoveAmountStart);
             var ditToSidePos = sidePos - Position;
             var angle = Vector3.SignedAngle(dirToTarget, ditToSidePos, Vector3.up);
-            // var walkable = _grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos));
-            // if (!walkable)
-            // {
-            //     sidePos = _movable.position - Right * StuckSideMoveAmountStart;
-            //     walkable = _grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos));
-            // }
-            // if (walkable)
-            // {
-            //     if (Math.Abs(angle) > 10)
-            //         WalkToWaypoints(new List<Vector3>(){sidePos, _currentTarget},OnFailed, OnReachedEndPoint);
-            //     else
-            //     {
-            //         WalkToPoint(_currentTarget, OnFailed, OnReachedEndPoint);
-            //     }
-            //     return true;
-            // }
             if (willWalk)
             {
                 if (Math.Abs(angle) > 10)
@@ -288,12 +291,15 @@ namespace Pathfinding.Agents
             return false;
         }
 
-        private bool GetSidePosition(out Vector3 result, float distance)
+        private bool GetSidePosition(out Vector3 result, float distance, int preferredSide)
         {
-            var sidePos = _movable.position + Right * (distance);
+            // Dbg.Red($"Stuck vector: {_stuckVector.normalized}");
+            var sideVec = Right;
+            // Debug.DrawLine(Position + Vector3.up * 0.5f, Position + sideVec  + Vector3.up * 0.5f, Color.black, 10f);
+            var sidePos = Position + sideVec * (preferredSide * distance);
             if (!_grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos)))
             {
-                sidePos = _movable.position - Right * distance;
+                sidePos = Position + sideVec * (-preferredSide * distance);
                 if (!_grid.CheckWalkableAndFree(_grid.GetGridCoordinate(sidePos)))
                 {
                     result = sidePos;
@@ -309,14 +315,17 @@ namespace Pathfinding.Agents
             _isMoving = true;
             _percent = 0f;
             _currentSpeed = _moveSpeed;
-            _nextPercent = PercentSpeed * PathfindingManager.DeltaTime;
-            _lookDirection = _mover.EvaluateAt(_nextPercent) - Position;
-            // Debug.Log($"Next pos: {_mover.GetPosition(_nextPercent)}, Pos: {Position}, look: {_lookDirection}");
+            // _nextPercent = PercentSpeed * PathfindingManager.DeltaTime;
+            _lookDirection = _mover.EvaluateAt(0.05f) - Position;
             _listener.OnBeganRotation();
             if (_lookDirection.x != 0 || _lookDirection.z != 0)
             {
-                BeginRotation(_lookDirection);
-                return;
+                var rot = Quaternion.LookRotation(_lookDirection);
+                if (CheckRotationCondition(rot))
+                {
+                    BeginRotation(rot);
+                    return;
+                }
             }
             BeginMovement();
         }
@@ -328,7 +337,16 @@ namespace Pathfinding.Agents
             _State = AgentState.Running;
             _moveAction = CalculateNextPosition;   
         }
+
         
+        
+        
+        
+        
+        
+        
+        
+        // MAIN MOVEMENT FUNCTION
         private void CalculateNextPosition()
         {
             if (_percent >= 1f)
@@ -340,27 +358,73 @@ namespace Pathfinding.Agents
                 _movementEndAction.Invoke();
                 return;
             }
-            var dt = PathfindingManager.DeltaTime;
-            _nextPercent = _percent + PercentSpeed * dt;
-            var currentPos = Position;
-            var diff = _mover.EvaluateAt(_nextPercent) - currentPos;
-            _nextPos = currentPos + (diff).normalized 
-                * (dt * _currentSpeed);
-            if(_doDebug)
-                Dbg.Log($"Calculate next, np: {_nextPercent}, prev: {_percent}");
-        }
 
-        protected void BeginRotation(Vector3 lookVector)
+            var dt = PathfindingManager.DeltaTime;
+            _percent = _mover.GetPercent(Position);
+            _nextPercent = _percent + PercentSpeed * dt;
+            _nextPos = _mover.EvaluateAt(_nextPercent);
+            _rigidbody.velocity = (_nextPos - Position).normalized * _moveSpeed;
+            
+            var rotVec = _nextPos - _prevPosition;
+            if(rotVec.x > 0.00001  || rotVec.z > 0.00001)
+                Rotation = Quaternion.Lerp(Rotation,Quaternion.LookRotation(rotVec), 0.1f);
+            Debug.DrawRay(Position, rotVec, Color.red, 3);
+            
+            #region Check For Stuck
+            var distance2 = (Position - _prevPosition).sqrMagnitude;
+            if (distance2 < MinMove2)
+            {
+                // _State = AgentState.Blocked;
+                _stuckTime += Time.deltaTime;
+                if (_stuckTime >= StuckTime)
+                {
+                    _stuckTime = 0f;
+                    _prevPosition = Position;
+                    Debug.Log($"Stuck completely");
+                    if(MoveToUnstuckSideways())
+                        return;
+                }
+            }
+            else
+                _stuckTime = 0;
+            #endregion
+            _prevPosition = Position;
+
+            if ((_currentTarget - Position).sqrMagnitude <= 0.1f * 0.1f)
+            {
+                Debug.Log($"Reached Final position");
+                _rigidbody.velocity = Vector3.zero;
+                OnReachedEndPoint();
+            }
+        }
+        
+        
+        
+        
+        
+        
+        
+        
+        
+
+        private bool CheckRotationCondition(Quaternion rotation)
+        {
+            var diff = Math.Abs(rotation.eulerAngles.y - Rotation.eulerAngles.y);
+            // Dbg.Red($"Angles diff: {diff}");
+            return diff > 10;
+        }
+        
+        private void BeginRotation(Quaternion rotation)
         {
             _rotationPercent = 0f;
-            _endRotation = Quaternion.LookRotation(lookVector);
+            _endRotation = rotation;
             _startRotation = Rotation;
-            _moveAction = Rotating;
+            _moveAction = CalculateNextRotation;
             _listener.OnBeganRotation();
             _State = AgentState.Rotating;
         }
 
-        protected void Rotating()
+        private void CalculateNextRotation()
         {
             _rotationPercent += Time.deltaTime * _rotationSpeed;
             Rotation = Quaternion.Lerp(_startRotation, _endRotation, _rotationPercent);
@@ -371,23 +435,45 @@ namespace Pathfinding.Agents
             }
         }
         
-        protected GridCoord2 CorrectDestination(Vector3 targetPosition)
+        private GridCoord2 CorrectDestination(Vector3 targetPosition)
         {
             _grid.FreeCoord(_currentCoord);
             var currentWorld = Position;
             _currentCoord  = _grid.GetGridCoordinate(currentWorld);
             var toGrid = _grid.GetGridCoordinate(targetPosition);
-            var freeGrid = FreePositionFinder.GetClosestFree(_grid, _currentCoord, toGrid);
+            #if CorrectDestination
+            var freeWorld = FreePositionFinder.GetClosestPos(_grid, this, currentWorld, _currentTarget, _agentRadius);
+            #else
+            var freeWorld = targetPosition;
+            #endif
+            var freeGrid = _grid.GetGridCoordinate(freeWorld);
             if (toGrid != freeGrid)
                 targetPosition = _grid.GetWorldPosition(freeGrid);
             targetPosition.y = currentWorld.y;
             _currentTarget = targetPosition;
             OccupyCurrent();
             // Debug.DrawLine(currentWorld + Vector3.up * 0.2f, _currentTarget + Vector3.up * 0.2f, Color.white, 4f);
+            
+            
+            
             return freeGrid;
         }
+
+        private void WalkToPoint(Vector3 targetPosition, ICollection<GridCoord2> excluded, Action onFailed, Action onReached)
+        {
+            PathfindingManager.RemoveMovingAgent(this);
+            _mover = null;
+            var correctedTarget = CorrectDestination(targetPosition);
+            if (correctedTarget == _currentCoord)
+            {
+                onReached.Invoke();
+                return;
+            }
+            var path = _pathfinding.FindPath(_currentCoord, correctedTarget, excluded);
+            SetupMoverForPath(path, onFailed, onReached);
+        }
         
-        protected void WalkToPoint(Vector3 targetPosition, Action onFailed, Action onReached)
+        private void WalkToPoint(Vector3 targetPosition, Action onFailed, Action onReached)
         {
             PathfindingManager.RemoveMovingAgent(this);
             var freeGrid = CorrectDestination(targetPosition);
@@ -401,7 +487,7 @@ namespace Pathfinding.Agents
             SetupMoverForPath(path, onFailed, onReached);
         }
 
-        protected void WalkToWaypoints(List<Vector3> waypoints, Action onFailed, Action onReached)
+        private void WalkToWaypoints(List<Vector3> waypoints, Action onFailed, Action onReached)
         {
             PathfindingManager.RemoveMovingAgent(this);
             var currentPosition = _nextPos = Position;
@@ -409,7 +495,7 @@ namespace Pathfinding.Agents
             var waypointsGrid = new List<GridCoord2>(waypoints.Count);
             if (_grid.GetGridCoordinate(waypoints[^1]) == fromGridCoord)
             {
-                Dbg.Red($"[{gameObject.name}] Free grid coord = current coord");
+                // Dbg.Red($"[{gameObject.name}] Free grid coord = current coord");
                 onReached.Invoke();
                 return;   
             }
@@ -418,21 +504,21 @@ namespace Pathfinding.Agents
                 var coord = _grid.GetGridCoordinate(waypoint);
                 waypointsGrid.Add(coord);
             }
-            var path = _pathfinding.FindPathOnWaypoints(fromGridCoord, waypointsGrid, 
-                new List<GridCoord2>());
+            var busy = _grid.GetBusyCoords();
+            var path = _pathfinding.FindPathOnWaypoints(fromGridCoord, waypointsGrid, busy);
             SetupMoverForPath(path, onFailed, onReached);
         }
         
-        protected void SetupMoverForPath(Path path, Action onFailed, Action onReached)
+        private void SetupMoverForPath(Path path, Action onFailed, Action onReached)
         {
             if (path == null || path.Points.Count < 2)
             {
-                var message = $"No Path Found!";
-                if (path == null)
-                    message += " Path == null";
-                else if (path.Points.Count < 2)
-                    message += " Points count < 2";
-                Log(message); return;
+                // var message = $"No Path Found!";
+                // if (path == null)
+                //     message += " Path == null";
+                // else if (path.Points.Count < 2)
+                //     message += " Points count < 2";
+                /* Log(message); */ return;
             }
             RefreshFieldsForNewPath();
             _movementEndAction = onReached;
@@ -456,29 +542,42 @@ namespace Pathfinding.Agents
             PathfindingManager.AddMovingAgent(this);
         }
 
-        protected void RefreshFieldsForNewPath()
+        private void RefreshFieldsForNewPath()
         {
             _percent = _nextPercent = 0f;
-            // _percentSpeed = _moveSpeed / _pathTotalDistance;
             _grid.FreeCoord(_currentCoord);
             OccupyCurrent();   
         }
         
-        protected void OnFailed()
+        private void OnFailed()
         {
-            WalkToPoint(_setTarget, OnFailed, OnReachedEndPoint);
+            PathfindingManager.RemoveMovingAgent(this);
+            Debug.Log($"Failed to walk to: {_setTarget}");
+            // WalkToPoint(_setTarget, OnFailed, OnReachedEndPoint);
         }
 
-        protected void OccupyCurrent()
+        private void OccupyCurrent()
         {
             _currentCoord = _grid.GetGridCoordinate(Position);
             _grid.SetBusy(_currentCoord);
         }
 
-        protected void OnReachedEndPoint()
+        private void OnReachedEndPoint()
         {
-            _listener.OnStopped();
+            PathfindingManager.RemoveMovingAgent(this);
+            _State = AgentState.Idle;
             _listener.OnReachedFinalPoint();
+        }
+        
+        private void SetNextCoord()
+        {
+            var nextCoord = _grid.GetGridCoordinate(_nextPos);
+            if (nextCoord != _currentCoord)
+            {
+                _grid.FreeCoord(_currentCoord);
+                _grid.SetBusy(nextCoord);
+                _currentCoord = nextCoord;
+            }
         }
         
         protected void Log(string message)
@@ -486,45 +585,5 @@ namespace Pathfinding.Agents
             Debug.Log($"[{gameObject.name}] {message}");
         }
         
-        
-        protected IEnumerator Moving(Action onEnd)
-        {
-            _isMoving = true;
-            _currentSpeed = _moveSpeed;
-            _nextPercent = PercentSpeed * PathfindingManager.DeltaTime;
-            _lookDirection = _mover.EvaluateAt(_nextPercent) - Position;
-            Debug.Log($"Next pos: {_mover.EvaluateAt(_nextPercent)}, Pos: {Position}, look: {_lookDirection}");
-            _currentSpeed = 0f;
-            _listener.OnBeganRotation();
-            if (_lookDirection.x != 0 || _lookDirection.z != 0)
-            {
-                // Rotation = Quaternion.LookRotation(_lookDirection);
-                Dbg.Blue("Calling rotate to look cor");
-                _State = AgentState.Rotating;
-                // yield return RotatingToLook(_lookDirection);
-            }
-            else
-                Dbg.Red($"Look direction is zero vector");
-            _listener.OnEndedRotation();
-            _currentSpeed = _moveSpeed;
-            _listener.OnBeganMovement();
-            _State = AgentState.Running;
-            Dbg.Green($"Set Run state");
-            while (_percent < 1f)
-            {
-                var dt = PathfindingManager.DeltaTime;
-                _nextPercent = _percent + PercentSpeed * dt;
-                var currentPos = Position;
-                var diff = _mover.EvaluateAt(_nextPercent) - currentPos;
-                _nextPos = currentPos + (diff).normalized 
-                    * (dt * _currentSpeed);
-                yield return null;    
-            }
-            _isMoving = false;
-            _nextPos = Position;
-            _nextPercent = 1f;
-            _State = AgentState.Idle;
-            onEnd.Invoke();
-        }
     }
 }

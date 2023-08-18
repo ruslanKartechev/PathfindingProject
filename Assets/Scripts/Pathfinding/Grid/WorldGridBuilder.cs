@@ -17,6 +17,8 @@ namespace Pathfinding.Grid
         [SerializeField] private  Color mainColor;
         [SerializeField] private  Color blockedColor;
         [SerializeField] private  Color highlightedColor;
+        [SerializeField] private  Color checkedColor;
+        
         [SerializeField] private  LayerMask obstaclesMask;
         [SerializeField] private  float gizmosY;
         #endif
@@ -25,12 +27,13 @@ namespace Pathfinding.Grid
         [SerializeField] private  WorldGridSettings settings;
         [SerializeField] private  WorldGrid grid;
 
+        public IPathfindingGrid GetGrid() => grid;
+        
         private void Awake()
         {
             grid.Init();
-            SetForListeners();
+            SetGridToListeners();
         }
-        
         
 
 #if UNITY_EDITOR
@@ -59,13 +62,13 @@ namespace Pathfinding.Grid
             }
             Gizmos.color = Color.white;
 
-            // Gizmos.color = Color.green;
-            // foreach (var point in _debugPoints)
-            // {
-            //     var pos = GetPosition(point.x, point.y, size);
-            //     Gizmos.DrawCube(pos + Vector3.up * .05f, sizeVec);
-            // }
-            // Gizmos.color = Color.white;
+            Gizmos.color = checkedColor;
+            foreach (var point in _debugPoints)
+            {
+                var pos = GetPosition(point.x, point.y, size);
+                Gizmos.DrawCube(pos + Vector3.up * .1f, sizeVec);
+            }
+            Gizmos.color = Color.white;
 
             Gizmos.color = highlightedColor;
             foreach (var point in _occupiedPoints)
@@ -110,19 +113,17 @@ namespace Pathfinding.Grid
             }
             grid = new WorldGrid(settings.xCount, settings.yCount, size, GetPosition(0,0, size));
             grid.GridPoints = new List<GridPoint>(pointsArray);
-            SetForListeners();
+            SetGridToListeners();
         }
 
-        private void SetForListeners()
+        private void SetGridToListeners()
         {
             var listeners = GetComponentsInChildren<IGridBuilderListener>();
             foreach (var listener in listeners)
-            {
                 listener.SetGrid(grid);
-            }
         }
-        
-        public bool CheckForObstacle(Vector3 position, float size)
+
+        private bool CheckForObstacle(Vector3 position, float size)
         {
             var volume = Vector3.one * size / 2;
             volume.y = size * 4;
@@ -130,9 +131,9 @@ namespace Pathfinding.Grid
             return overlap.Length > 0;
         }
 
-        public IPathfindingGrid GetGrid() => grid;
-
-
+        
+        
+        
         #region Static Gizmos Debugging
 #if UNITY_EDITOR
         private static List<GridCoord2> _debugPoints = new List<GridCoord2>();
@@ -157,6 +158,7 @@ namespace Pathfinding.Grid
         
         public static void ClearCheckedPoints() => _debugPoints.Clear();
         public static void ClearOccupiedPoints() => _occupiedPoints.Clear();
+        
 #endif
         #endregion
 

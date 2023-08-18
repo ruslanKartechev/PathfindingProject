@@ -20,7 +20,7 @@ namespace Pathfinding
         private HashSet<IPathfindingAgent> _addMovingAgentsQueue 
             = new HashSet<IPathfindingAgent>(10);
 
-        private const float TimeDelta = 1 / 60f;
+        private const float TimeDelta = 1 / 50f;
         public static float DeltaTime => TimeDelta * Time.timeScale;
         
         private void Awake()
@@ -63,13 +63,13 @@ namespace Pathfinding
                 _addMovingAgentsQueue.Clear();
                 foreach (var agent in _agentsRunning)
                     agent.NextAction();
-                for (var i = 0; i < 1; i++)
-                {
-                    foreach (var agent in _agentsRunning)
-                        agent.CorrectPosition();     
-                }
-                foreach (var agent in _agentsRunning)
-                    agent.ApplyPosition();
+                // for (var i = 0; i < 1; i++)
+                // {
+                //     foreach (var agent in _agentsRunning)
+                //         agent.CorrectPosition();     
+                // }
+                // foreach (var agent in _agentsRunning)
+                //     agent.ApplyPosition();
 #if Measure
                 watch.Stop();
                 var elapsedMs = watch.ElapsedMilliseconds;

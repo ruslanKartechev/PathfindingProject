@@ -29,7 +29,7 @@ namespace Pathfinding.Algorithms.Impl
         }
         
         public abstract Path FindPath(GridCoord2 from, GridCoord2 target);
-        public abstract Path FindPathOnWaypoints(GridCoord2 start, IList<GridCoord2> targets, IEnumerable<GridCoord2> excluded);
+        public abstract Path FindPathOnWaypoints(GridCoord2 start, IList<GridCoord2> targets, ICollection<GridCoord2> excluded);
 
         public virtual void SetGrid(IPathfindingGrid grid)
         {
