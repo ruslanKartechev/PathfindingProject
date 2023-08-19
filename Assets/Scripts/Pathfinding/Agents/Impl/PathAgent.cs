@@ -15,7 +15,7 @@ namespace Pathfinding.Agents
     {
         #region Constants
         private const float MinMove2 = 0.004f * 0.004f; // minimum movement squared
-        private const float StuckTime = 0.4f; // time to be stuck in seconds
+        private const float StuckTime = 0.5f; // time to be stuck in seconds
         private const float StuckSideMoveAmountStart = 2; // amount to move sideways, when stuck
         private const float StuckSideMoveAmountEnd = 5; // amount to move sideways, when stuck
         private const float StuckSideMoveAmountStep = 1; // amount to move sideways, when stuck
@@ -359,15 +359,16 @@ namespace Pathfinding.Agents
                 return;
             }
 
-            var dt = PathfindingManager.DeltaTime;
             _percent = _mover.GetPercent(Position);
-            _nextPercent = _percent + PercentSpeed * dt;
-            _nextPos = _mover.EvaluateAt(_nextPercent);
-            _rigidbody.velocity = (_nextPos - Position).normalized * _moveSpeed;
+            var forwardPosition = Position + Forward;
+            _nextPercent = _mover.GetPercent(forwardPosition);
+            var nextPosOnSpline = _mover.EvaluateAt(_nextPercent);
+            _nextPos = Vector3.Lerp(nextPosOnSpline, forwardPosition, .6f);
+            _rigidbody.velocity = (nextPosOnSpline - Position).normalized * _currentSpeed;
             
             var rotVec = _nextPos - _prevPosition;
             if(rotVec.x > 0.00001  || rotVec.z > 0.00001)
-                Rotation = Quaternion.Lerp(Rotation,Quaternion.LookRotation(rotVec), 0.1f);
+                Rotation = Quaternion.Lerp(Rotation,Quaternion.LookRotation(rotVec), .05f);
             Debug.DrawRay(Position, rotVec, Color.red, 3);
             
             #region Check For Stuck
@@ -381,8 +382,8 @@ namespace Pathfinding.Agents
                     _stuckTime = 0f;
                     _prevPosition = Position;
                     Debug.Log($"Stuck completely");
-                    if(MoveToUnstuckSideways())
-                        return;
+                    // if(MoveToUnstuckSideways())
+                        // return;
                 }
             }
             else
@@ -397,15 +398,12 @@ namespace Pathfinding.Agents
                 OnReachedEndPoint();
             }
         }
-        
-        
-        
-        
-        
-        
-        
-        
-        
+
+        private void OnCollisionEnter(Collision collision)
+        {
+            
+        }
+
 
         private bool CheckRotationCondition(Quaternion rotation)
         {

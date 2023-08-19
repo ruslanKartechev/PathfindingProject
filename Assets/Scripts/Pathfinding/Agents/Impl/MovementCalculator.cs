@@ -1,4 +1,4 @@
-﻿#define DoDebug
+﻿#define DoDebug__
 using System;
 using System.Collections.Generic;
 using Pathfinding.Algorithms;
